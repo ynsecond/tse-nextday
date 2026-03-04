@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="翌日銘柄選定">
+<meta name="theme-color" content="#03060f">
+<title>TSE 翌日・PTS 銘柄選定</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+:root{
+  --bg0:#03060f;--bg1:#070d1c;--bg2:#0c1528;--bg3:#111e35;
+  --line:#1a2d46;--line2:#223550;
+  --text:#bdd0e8;--muted:#3a5270;--dim:#1e3350;
+  --gold:#f5c842;--gold2:#c49a20;--gold3:#2e2208;
+  --green:#00e5a0;--green2:#00b87a;--green3:#00291a;
+  --red:#ff4060;--blue:#4db8ff;--blue3:#001f30;
+  --purple:#c084fc;--purple3:#1e0a30;
+  --orange:#ff9520;--orange3:#2a1500;
+  --mono:'DM Mono',monospace;--sans:'Noto Sans JP',sans-serif;
+  --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg0);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 70% 35% at 90% 0%,rgba(245,200,66,.05) 0%,transparent 55%),
+             radial-gradient(ellipse 50% 30% at 0% 100%,rgba(0,229,160,.03) 0%,transparent 55%),
+             linear-gradient(rgba(77,184,255,.007) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(77,184,255,.007) 1px,transparent 1px);
+  background-size:100% 100%,100% 100%,32px 32px,32px 32px}
+
+header{position:sticky;top:0;z-index:300;
+  background:rgba(3,6,15,.95);border-bottom:1px solid var(--line);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  padding:calc(var(--st)+8px) 14px 8px}
+.hr1{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.logo{flex:1}
+.logo-t{font-family:var(--mono);font-size:12px;letter-spacing:.15em;color:var(--gold);text-transform:uppercase}
+.logo-s{font-size:9px;color:var(--muted);margin-top:1px}
+.mtog{display:flex;background:var(--bg3);border:1px solid var(--line2);border-radius:20px;padding:3px;gap:2px}
+.mp{font-family:var(--mono);font-size:9px;padding:4px 9px;border-radius:14px;cursor:pointer;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--muted);transition:all .2s;border:1px solid transparent;white-space:nowrap}
+.mp.on{background:var(--gold3);color:var(--gold);border-color:var(--gold2)}
+.mp.pts.on{background:var(--purple3);color:var(--purple);border-color:#7c3aed}
+.scan-btn{font-family:var(--mono);font-size:11px;padding:7px 14px;border-radius:8px;cursor:pointer;
+  text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--gold2);
+  background:transparent;color:var(--gold);transition:all .15s}
+.scan-btn:active{background:var(--gold);color:var(--bg0)}
+.scan-btn.run{border-color:var(--green2);color:var(--green);animation:bl 1s ease-in-out infinite}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:.35}}
+.hr2{display:flex;gap:12px;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;font-family:var(--mono);font-size:9px;color:var(--muted);white-space:nowrap}
+.hr2::-webkit-scrollbar{display:none}
+.hs{display:flex;gap:4px}.hs b{color:var(--text)}.hs.g b{color:var(--green)}.hs.y b{color:var(--gold)}
+.pw{width:100%;height:2px;background:var(--bg3);margin-top:6px;border-radius:1px;overflow:hidden}
+#pbar{height:100%;width:0%;background:linear-gradient(90deg,var(--gold),var(--green));
+  border-radius:1px;transition:width .4s ease}
+
+/* proxy status */
+#proxy-status{margin:8px 12px 0;padding:7px 11px;border-radius:7px;
+  font-family:var(--mono);font-size:10px;line-height:1.6;
+  background:var(--bg2);border:1px solid var(--line);position:relative;z-index:1;display:none}
+#proxy-status.ok{border-color:var(--green2);background:var(--green3)}
+#proxy-status.err{border-color:var(--red);background:#200010}
+
+#filter-banner{display:none;margin:8px 12px 0;padding:9px 12px;border-radius:8px;
+  background:var(--orange3);border:1px solid var(--orange);
+  font-size:11px;line-height:1.6;position:relative;z-index:1}
+#filter-banner b{color:var(--orange);font-family:var(--mono)}
+
+.tabs{display:flex;background:var(--bg1);border-bottom:1px solid var(--line);
+  position:sticky;top:calc(var(--st)+88px);z-index:200}
+.tab{flex:1;text-align:center;font-family:var(--mono);font-size:10px;
+  letter-spacing:.07em;text-transform:uppercase;padding:9px 0;
+  color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+
+main{padding:10px 12px calc(var(--sb)+20px);position:relative;z-index:1;min-height:100vh}
+.page{display:none}.page.on{display:block}
+
+#flash{display:none;position:fixed;top:0;left:0;right:0;z-index:999;
+  padding:calc(var(--st)+78px) 14px 12px;background:linear-gradient(135deg,#1e1200,#0a0800);
+  border-bottom:1px solid var(--gold2);font-family:var(--mono);font-size:11px;
+  line-height:1.6;color:var(--gold);animation:sd .3s ease}
+@keyframes sd{from{transform:translateY(-110%)}to{transform:translateY(0)}}
+#fx{position:absolute;top:calc(var(--st)+70px);right:12px;
+  background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer}
+
+.stitle{font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.12em;text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;margin-bottom:8px;margin-top:4px}
+.stitle::after{content:'';flex:1;height:1px;background:var(--line)}
+.scnt{background:var(--bg3);border:1px solid var(--line2);border-radius:4px;
+  padding:2px 7px;font-size:9px;color:var(--gold)}
+
+.picks{display:flex;flex-direction:column;gap:10px}
+.pick{background:var(--bg2);border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;animation:cin .35s ease;position:relative}
+@keyframes cin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.pick.top3{border-color:var(--gold2)}
+.pick.top1{box-shadow:0 0 16px rgba(245,200,66,.12)}
+.medal{position:absolute;top:0;left:0;width:28px;height:28px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10px;border-radius:0 0 7px 0;z-index:1}
+.m1{background:linear-gradient(135deg,#7a5500,var(--gold));color:#000}
+.m2{background:linear-gradient(135deg,#444,#bbb);color:#000}
+.m3{background:linear-gradient(135deg,#5a2a0a,#c07030);color:#000}
+.mn{background:var(--bg3);color:var(--muted)}
+.pbody{padding:10px 12px 10px 36px}
+.ptop{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.pleft{flex:1;min-width:0}
+.pcode{font-family:var(--mono);font-size:20px;line-height:1;letter-spacing:.02em}
+.pname{font-size:11px;color:var(--muted);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.ptag{font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:3px;
+  border:1px solid;letter-spacing:.04em;text-transform:uppercase}
+.tg{background:var(--green3);border-color:var(--green2);color:var(--green)}
+.ty{background:var(--gold3);border-color:var(--gold2);color:var(--gold)}
+.tp{background:var(--purple3);border-color:#7c3aed;color:var(--purple)}
+.tb{background:var(--blue3);border-color:#1d6fa0;color:var(--blue)}
+.tn{background:var(--bg3);border-color:var(--line2);color:var(--muted)}
+.pscore{text-align:right;flex-shrink:0}
+.sc-n{font-family:var(--mono);font-size:27px;line-height:1}
+.sc-d{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.sc-bw{width:54px;height:3px;background:var(--bg3);border-radius:2px;margin-top:4px;overflow:hidden}
+.sc-b{height:100%;border-radius:2px;transition:width .6s ease}
+.pgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px}
+.pc{background:var(--bg3);border-radius:7px;padding:6px 8px;border:1px solid var(--line)}
+.pl{font-size:8px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.pv{font-family:var(--mono);font-size:13px;margin-top:2px}
+.pv.cu{color:var(--text)}.pv.tp2{color:var(--gold)}.pv.sl{color:var(--red)}
+.ps{font-size:9px;margin-top:1px}
+.ps.u{color:var(--green)}.ps.d{color:var(--red)}.ps.n{color:var(--muted)}
+.rbox{background:var(--bg3);border:1px solid var(--line);border-radius:7px;
+  padding:8px 10px;margin-bottom:7px}
+.rtitle{font-family:var(--mono);font-size:8px;color:var(--muted);
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+.rlist{display:flex;flex-direction:column;gap:3px}
+.ri{display:flex;align-items:baseline;gap:6px;font-size:10px;line-height:1.4}
+.ri-icon{flex-shrink:0}
+.ri-text{color:var(--text)}.ri-text b{color:var(--gold)}
+.mbar{display:flex;gap:5px;flex-wrap:wrap}
+.mb{background:var(--bg3);border:1px solid var(--line);border-radius:5px;
+  padding:4px 8px;font-family:var(--mono);font-size:9px;color:var(--muted)}
+.mb b{color:var(--text)}.mb.pos b{color:var(--green)}.mb.neg b{color:var(--red)}.mb.hlt b{color:var(--gold)}
+.ctime{font-family:var(--mono);font-size:9px;color:var(--dim);text-align:right;margin-top:5px}
+
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty .ico{font-size:40px;margin-bottom:10px;opacity:.4}
+.empty h3{font-size:14px;color:var(--dim);margin-bottom:6px}
+.empty p{font-size:11px;line-height:1.7}
+
+.sg{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+  margin-bottom:12px;overflow:hidden}
+.sg-t{padding:9px 13px;font-family:var(--mono);font-size:9px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.sr{display:flex;align-items:center;padding:11px 13px;
+  border-bottom:1px solid var(--line);gap:10px}
+.sr:last-child{border-bottom:none}
+.sl{flex:1}.sl .la{font-size:12px}.sl .su{font-size:10px;color:var(--muted);margin-top:2px}
+.sv{font-family:var(--mono);font-size:12px;color:var(--gold);white-space:nowrap}
+input[type=range]{width:90px;accent-color:var(--gold);-webkit-appearance:none;
+  height:3px;background:var(--bg3);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;
+  background:var(--gold);border-radius:50%;cursor:pointer}
+
+#logbox{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;max-height:65vh;overflow-y:auto}
+.le{font-family:var(--mono);font-size:10px;padding:4px 10px;
+  border-bottom:1px solid var(--bg3);color:var(--muted);line-height:1.5}
+.le.i{color:var(--blue)}.le.ok{color:var(--green)}.le.w{color:var(--gold)}.le.e{color:var(--red)}
+
+.clock-card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+  padding:13px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cs{background:var(--bg3);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.csn{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.cst{font-family:var(--mono);font-size:12px;margin-top:2px}
+.css{font-size:9px;margin-top:2px}
+.open{color:var(--green)}.closed{color:var(--muted)}.pts-col{color:var(--purple)}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="flash"><button id="fx" onclick="closeFlash()">×</button><div id="fmsg"></div></div>
+
+<header>
+  <div class="hr1">
+    <div class="logo">
+      <div class="logo-t">TSE 翌日・PTS 選定</div>
+      <div class="logo-s" id="logo-sub">東証全銘柄 1301〜9984</div>
+    </div>
+    <div class="mtog">
+      <div class="mp on"  id="mp-next" onclick="setMode('next')">翌日</div>
+      <div class="mp pts" id="mp-pts"  onclick="setMode('pts')">PTS</div>
+    </div>
+    <button class="scan-btn" id="scan-btn" onclick="toggleScan()">SCAN</button>
+  </div>
+  <div class="hr2">
+    <div class="hs"><b id="sv-mkt">待機中</b></div>
+    <div class="hs">対象 <b id="sv-total">8,684</b></div>
+    <div class="hs g">🏆 <b id="sv-picks">0</b>件</div>
+    <div class="hs"><b id="sv-scanned">0</b>進捗</div>
+    <div class="hs" id="hs-cur" style="display:none"><b id="sv-cur"></b></div>
+  </div>
+  <div class="pw"><div id="pbar"></div></div>
+</header>
+
+<div id="proxy-status"></div>
+<div id="filter-banner"></div>
+
+<div class="tabs">
+  <div class="tab on" onclick="showPage('picks',this)">ランキング</div>
+  <div class="tab" onclick="showPage('settings',this)">設定</div>
+  <div class="tab" onclick="showPage('log',this)">ログ</div>
+</div>
+
+<main>
+  <div id="page-picks" class="page on">
+    <div class="stitle">
+      <span id="picks-mode-label">翌日買い候補</span>
+      <span class="scnt" id="picks-cnt">0件</span>
+    </div>
+    <div class="picks" id="picks-list">
+      <div class="empty">
+        <div class="ico">🔍</div>
+        <h3>スキャン待機中</h3>
+        <p>「SCAN」を押すと東証全銘柄<br>（コード1301〜9984）をスキャンします<br><br>
+        <span style="font-size:10px;color:var(--muted)">
+          検出数が多い場合は自動で厳選<br>最終的にベスト15件を表示
+        </span></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-settings" class="page">
+    <div class="clock-card">
+      <div class="cs"><div class="csn">前場</div><div class="cst">09:00〜11:30</div>
+        <div class="css" id="s-am">-</div></div>
+      <div class="cs"><div class="csn">後場</div><div class="cst">12:30〜15:30</div>
+        <div class="css" id="s-pm">-</div></div>
+      <div class="cs"><div class="csn">PTS夜間</div><div class="cst">16:00〜翌0:00</div>
+        <div class="css pts-col">終値ベース</div></div>
+      <div class="cs"><div class="csn">現在時刻</div>
+        <div class="cst" id="s-clock" style="color:var(--gold)">--:--:--</div>
+        <div class="css open">24時間スキャン可</div></div>
+    </div>
+    <div class="sg">
+      <div class="sg-t">スキャン設定</div>
+      <div class="sr">
+        <div class="sl"><div class="la">初期スコア閾値</div>
+          <div class="su">まずこの点数以上を収集</div></div>
+        <input type="range" min="30" max="80" value="55" id="r-base" oninput="upBase(this.value)">
+        <div class="sv" id="sv-base">55点</div>
+      </div>
+      <div class="sr">
+        <div class="sl"><div class="la">表示上限</div>
+          <div class="su">超えたら自動で厳選</div></div>
+        <input type="range" min="5" max="30" step="5" value="15" id="r-max" oninput="upMax(this.value)">
+        <div class="sv" id="sv-max">15件</div>
+      </div>
+      <div class="sr">
+        <div class="sl"><div class="la">最低出来高</div>
+          <div class="su">流動性フィルター</div></div>
+        <input type="range" min="0" max="5" step="1" value="2" id="r-vol" oninput="upVol(this.value)">
+        <div class="sv" id="sv-vol">20万株</div>
+      </div>
+      <div class="sr">
+        <div class="sl"><div class="la">バッチサイズ</div>
+          <div class="su">1回のAPI取得銘柄数（少ないほど安定）</div></div>
+        <input type="range" min="20" max="100" step="20" value="40" id="r-batch" oninput="upBatch(this.value)">
+        <div class="sv" id="sv-batch">40銘柄</div>
+      </div>
+    </div>
+    <div class="sg">
+      <div class="sg-t">接続方法</div>
+      <div class="sr"><div class="sl">
+        <div class="la" style="color:var(--green)">① 自前Cloudflare Worker（最優先）</div>
+        <div class="su">black-sun-a8c8.ynsecond.workers.dev</div>
+      </div></div>
+      <div class="sr"><div class="sl">
+        <div class="la">② 直接接続（フォールバック）</div>
+        <div class="su">query1.finance.yahoo.com</div>
+      </div></div>
+      <div class="sr"><div class="sl">
+        <div class="la">③ allorigins（フォールバック）</div>
+        <div class="su">api.allorigins.win</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div id="page-log" class="page">
+    <div id="logbox"></div>
+  </div>
+</main>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const CFG = {
+  baseScore: 55,
+  maxPicks:  15,
+  minVol:    200000,
+  batchSize: 40,
+  mode:      'next',
+};
+
+// Cloudflare Worker プロキシ（自前・確実）
+const CF_WORKER = 'https://black-sun-a8c8.ynsecond.workers.dev';
+
+const YF_FIELDS = [
+  'regularMarketPrice','regularMarketOpen','regularMarketDayHigh','regularMarketDayLow',
+  'regularMarketPreviousClose','regularMarketChangePercent','regularMarketVolume',
+  'averageDailyVolume10Day','averageDailyVolume3Month',
+  'fiftyTwoWeekHigh','fiftyTwoWeekLow','fiftyDayAverage','twoHundredDayAverage',
+  'shortName','longName',
+].join(',');
+
+function makeYFUrl(symbols) {
+  return `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(','))}&fields=${YF_FIELDS}&lang=ja&region=JP`;
+}
+
+const STRATEGIES = [
+  // 1. 自前Cloudflare Worker（最優先）
+  async (symbols) => {
+    const yf  = makeYFUrl(symbols);
+    const url = `${CF_WORKER}?url=${encodeURIComponent(yf)}`;
+    const r   = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('worker HTTP ' + r.status);
+    const j = await r.json();
+    return j?.quoteResponse?.result || [];
+  },
+  // 2. 直接接続（query1）
+  async (symbols) => {
+    const r = await fetch(makeYFUrl(symbols).replace('query2','query1'),
+      { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('direct HTTP ' + r.status);
+    const j = await r.json();
+    return j?.quoteResponse?.result || [];
+  },
+  // 3. allorigins
+  async (symbols) => {
+    const p = `https://api.allorigins.win/raw?url=${encodeURIComponent(makeYFUrl(symbols))}`;
+    const r = await fetch(p, { signal: AbortSignal.timeout(18000) });
+    if (!r.ok) throw new Error('allorigins HTTP ' + r.status);
+    const j = await r.json();
+    return j?.quoteResponse?.result || [];
+  },
+];
+
+const STRATEGY_NAMES = ['①CF-Worker', '②直接接続', '③allorigins'];
+let activeStrategy = 0;
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let scanning = false, stopFlag = false, picks = [];
+let scanTotal = 0, scanDone = 0, mode = 'next';
+
+// ══════════════════════════════════════════
+//  BUILD CODE LIST
+// ══════════════════════════════════════════
+function buildCodes() {
+  const c = [];
+  for (let i = 1301; i <= 9984; i++) c.push(i + '.T');
+  return c;
+}
+
+// ══════════════════════════════════════════
+//  SMART FETCH — 成功した戦略を記憶して優先使用
+// ══════════════════════════════════════════
+async function fetchBatch(symbols) {
+  // まず前回成功した戦略を試す
+  const order = [activeStrategy];
+  for (let i = 0; i < STRATEGIES.length; i++) {
+    if (i !== activeStrategy) order.push(i);
+  }
+
+  for (const idx of order) {
+    try {
+      const results = await STRATEGIES[idx](symbols);
+      if (results.length > 0 || symbols.length <= 5) {
+        // 戦略が変わったらログに出す
+        if (idx !== activeStrategy) {
+          activeStrategy = idx;
+          showProxyStatus(`✅ ${STRATEGY_NAMES[idx]} で接続成功`, 'ok');
+          log(`接続戦略を ${STRATEGY_NAMES[idx]} に切り替え`, 'ok');
+        }
+        return results;
+      }
+    } catch(e) {
+      log(`${STRATEGY_NAMES[idx]} 失敗: ${e.message.slice(0,50)}`, 'w');
+    }
+  }
+  return [];
+}
+
+function showProxyStatus(msg, cls) {
+  const el = document.getElementById('proxy-status');
+  el.textContent = msg;
+  el.className = cls;
+  el.style.display = 'block';
+  setTimeout(() => { if (el.textContent === msg) el.style.display = 'none'; }, 8000);
+}
+
+// ══════════════════════════════════════════
+//  SCORING — 翌日モード（100点満点）
+// ══════════════════════════════════════════
+function scoreNext(q) {
+  const price = q.regularMarketPrice, open = q.regularMarketOpen;
+  const high  = q.regularMarketDayHigh, low = q.regularMarketDayLow;
+  const chg   = q.regularMarketChangePercent || 0;
+  const vol   = q.regularMarketVolume;
+  const avg   = q.averageDailyVolume10Day || q.averageDailyVolume3Month || 0;
+  const w52h  = q.fiftyTwoWeekHigh, w52l = q.fiftyTwoWeekLow;
+  const ma50  = q.fiftyDayAverage,  ma200 = q.twoHundredDayAverage;
+
+  if (!price || !vol || price <= 0 || vol < CFG.minVol || chg < 0.3) return null;
+
+  let score = 0; const reasons = [], metrics = {};
+
+  // 出来高急増 max 30
+  if (avg > 0) {
+    const vr = vol / avg; metrics.vr = Math.round(vr * 10) / 10;
+    if (vr >= 5)       { score += 30; reasons.push({i:'🔥', t:`出来高<b>×${metrics.vr}</b> 異常急増`}); }
+    else if (vr >= 3)  { score += 24; reasons.push({i:'📈', t:`出来高<b>×${metrics.vr}</b> 大幅急増`}); }
+    else if (vr >= 2)  { score += 17; reasons.push({i:'📊', t:`出来高<b>×${metrics.vr}</b> 急増`}); }
+    else if (vr >= 1.5){ score += 10; reasons.push({i:'📊', t:`出来高<b>×${metrics.vr}</b> 増加`}); }
+    else if (vr >= 1.2){ score += 4;  reasons.push({i:'📊', t:`出来高<b>×${metrics.vr}</b>`}); }
+  }
+
+  // 上昇率 max 25
+  metrics.chg = Math.round(chg * 10) / 10;
+  if (chg >= 7)       { score += 25; reasons.push({i:'🚀', t:`<b>+${metrics.chg}%</b> 急騰`}); }
+  else if (chg >= 4)  { score += 20; reasons.push({i:'⬆️', t:`<b>+${metrics.chg}%</b> 大幅高`}); }
+  else if (chg >= 2.5){ score += 14; reasons.push({i:'⬆️', t:`<b>+${metrics.chg}%</b>`}); }
+  else if (chg >= 1.5){ score += 9;  reasons.push({i:'↗️', t:`<b>+${metrics.chg}%</b>`}); }
+  else if (chg >= 0.5){ score += 4;  reasons.push({i:'↗️', t:`<b>+${metrics.chg}%</b>`}); }
+
+  // 52週高値圏 max 20
+  if (w52h > 0 && w52l > 0) {
+    const pos = (price - w52l) / (w52h - w52l || 1);
+    metrics.wk = Math.round(pos * 100);
+    if (pos >= 0.95)     { score += 20; reasons.push({i:'👑', t:`52週高値<b>圏突入</b>(${metrics.wk}%)`}); }
+    else if (pos >= 0.85){ score += 16; reasons.push({i:'⭐', t:`52週高値圏接近(${metrics.wk}%)`}); }
+    else if (pos >= 0.70){ score += 10; reasons.push({i:'📍', t:`52週高値帯(${metrics.wk}%)`}); }
+    else if (pos >= 0.55){ score += 5;  reasons.push({i:'📍', t:`52週中間帯以上(${metrics.wk}%)`}); }
+    if (price >= w52h * 0.998) { score += 5; reasons.push({i:'💥', t:'<b>52週高値更新</b>'}); }
+  }
+
+  // 高値引け max 15
+  if (high > low) {
+    const cp = (price - low) / (high - low); metrics.cp = Math.round(cp * 100);
+    const yosen = price > open;
+    if (cp >= 0.85 && yosen) { score += 15; reasons.push({i:'🕯️', t:`高値引け<b>${metrics.cp}%</b>・陽線`}); }
+    else if (cp >= 0.70 && yosen){ score += 10; reasons.push({i:'🕯️', t:`高値圏引け${metrics.cp}%`}); }
+    else if (cp >= 0.55)         { score += 5;  reasons.push({i:'🕯️', t:`引け位置${metrics.cp}%`}); }
+  }
+
+  // MA位置 max 10
+  if (ma50 > 0 && ma200 > 0) {
+    if (price > ma50 && price > ma200 && ma50 > ma200) {
+      score += 10; reasons.push({i:'✨', t:'MA50↑MA200↑ <b>ゴールデンクロス帯</b>'});
+    } else if (price > ma50 && price > ma200) {
+      score += 7; reasons.push({i:'📈', t:'MA50・MA200ともに上方'});
+    } else if (price > ma50) {
+      score += 3; reasons.push({i:'📈', t:'MA50上方'});
+    }
+    metrics.ma50 = Math.round(ma50); metrics.ma200 = Math.round(ma200);
+  }
+
+  const dr = (high - low) || price * 0.02;
+  const tp = Math.round((price + dr * 2) * 10) / 10;
+  const sl = Math.round((price - dr) * 10) / 10;
+
+  const tags = [];
+  if (metrics.wk >= 90) tags.push({l:'高値突破', c:'tg'});
+  else if (metrics.wk >= 75) tags.push({l:'高値圏', c:'ty'});
+  if (metrics.vr >= 3) tags.push({l:`出来高×${metrics.vr}`, c:'tg'});
+  else if (metrics.vr >= 2) tags.push({l:`出来高×${metrics.vr}`, c:'tb'});
+  if (metrics.chg >= 5) tags.push({l:`+${metrics.chg}%急騰`, c:'tg'});
+  tags.push({l:'翌日候補', c:'ty'});
+
+  return { code: q.symbol.replace('.T',''), name: q.shortName||q.longName||q.symbol.replace('.T',''),
+    price, chg: metrics.chg, vol, avg, tp, sl, score,
+    reasons: reasons.slice(0,4), metrics, tags,
+    ts: new Date().toTimeString().slice(0,8), mode:'next' };
+}
+
+// ══════════════════════════════════════════
+//  SCORING — PTSモード（100点満点）
+// ══════════════════════════════════════════
+function scorePTS(q) {
+  const price = q.regularMarketPrice, open = q.regularMarketOpen;
+  const high  = q.regularMarketDayHigh, low = q.regularMarketDayLow;
+  const chg   = q.regularMarketChangePercent || 0;
+  const vol   = q.regularMarketVolume;
+  const avg   = q.averageDailyVolume10Day || q.averageDailyVolume3Month || 0;
+  const w52h  = q.fiftyTwoWeekHigh, w52l = q.fiftyTwoWeekLow;
+
+  if (!price || !vol || price <= 0 || vol < CFG.minVol || chg < 0.5) return null;
+
+  let score = 0; const reasons = [], metrics = {};
+
+  // 終値強度 max 30
+  if (high > low) {
+    const cp = (price - low) / (high - low); metrics.cp = Math.round(cp * 100);
+    const str = price > open && cp >= 0.7;
+    if (str && cp >= 0.9) { score += 30; reasons.push({i:'🕯️', t:`強い陽線・高値引け<b>${metrics.cp}%</b>`}); }
+    else if (str && cp >= 0.75) { score += 22; reasons.push({i:'🕯️', t:`陽線・高値圏引け<b>${metrics.cp}%</b>`}); }
+    else if (cp >= 0.65) { score += 14; reasons.push({i:'🕯️', t:`引け位置<b>${metrics.cp}%</b>`}); }
+    else if (cp >= 0.5)  { score += 7;  reasons.push({i:'🕯️', t:`中間以上引け(${metrics.cp}%)`}); }
+  }
+
+  // 出来高急増 max 25
+  if (avg > 0) {
+    const vr = vol / avg; metrics.vr = Math.round(vr * 10) / 10;
+    if (vr >= 4)        { score += 25; reasons.push({i:'🔥', t:`出来高<b>×${metrics.vr}</b> 爆増`}); }
+    else if (vr >= 2.5) { score += 20; reasons.push({i:'📈', t:`出来高<b>×${metrics.vr}</b> 急増`}); }
+    else if (vr >= 1.8) { score += 14; reasons.push({i:'📊', t:`出来高<b>×${metrics.vr}</b>`}); }
+    else if (vr >= 1.3) { score += 7;  reasons.push({i:'📊', t:`出来高<b>×${metrics.vr}</b>`}); }
+  }
+
+  // 上昇率 max 25
+  metrics.chg = Math.round(chg * 10) / 10;
+  if (chg >= 6)        { score += 25; reasons.push({i:'🚀', t:`<b>+${metrics.chg}%</b> 急騰`}); }
+  else if (chg >= 4)   { score += 20; reasons.push({i:'⬆️', t:`<b>+${metrics.chg}%</b> 大幅高`}); }
+  else if (chg >= 2.5) { score += 14; reasons.push({i:'⬆️', t:`<b>+${metrics.chg}%</b>`}); }
+  else if (chg >= 1.5) { score += 8;  reasons.push({i:'↗️', t:`<b>+${metrics.chg}%</b>`}); }
+  else if (chg >= 0.5) { score += 3;  reasons.push({i:'↗️', t:`<b>+${metrics.chg}%</b>`}); }
+
+  // 52週高値圏 max 20
+  if (w52h > 0 && w52l > 0) {
+    const pos = (price - w52l) / (w52h - w52l || 1);
+    metrics.wk = Math.round(pos * 100);
+    if (pos >= 0.93)     { score += 20; reasons.push({i:'👑', t:`52週高値<b>圏突入</b>(${metrics.wk}%)`}); }
+    else if (pos >= 0.80){ score += 14; reasons.push({i:'⭐', t:`52週高値圏接近(${metrics.wk}%)`}); }
+    else if (pos >= 0.65){ score += 7;  reasons.push({i:'📍', t:`52週高値帯(${metrics.wk}%)`}); }
+    if (price >= w52h * 0.999) { score += 5; reasons.push({i:'💥', t:'<b>52週高値ブレイク</b>'}); }
+  }
+
+  const dr = (high - low) || price * 0.02;
+  const tp = Math.round((price + dr * 1.5) * 10) / 10;
+  const sl = Math.round((price - dr * 0.8) * 10) / 10;
+
+  const tags = [];
+  if (metrics.wk >= 90) tags.push({l:'高値圏', c:'tg'});
+  if (metrics.vr >= 2.5) tags.push({l:`出来高×${metrics.vr}`, c:'tg'});
+  if (metrics.cp >= 85)  tags.push({l:'高値引け', c:'tp'});
+  tags.push({l:'PTS候補', c:'tp'});
+
+  return { code: q.symbol.replace('.T',''), name: q.shortName||q.longName||q.symbol.replace('.T',''),
+    price, chg: metrics.chg, vol, avg, tp, sl, score,
+    reasons: reasons.slice(0,4), metrics, tags,
+    ts: new Date().toTimeString().slice(0,8), mode:'pts' };
+}
+
+// ══════════════════════════════════════════
+//  AUTO-TIGHTENING FILTER
+// ══════════════════════════════════════════
+function autoFilter(candidates, maxPicks, baseScore) {
+  if (candidates.length <= maxPicks)
+    return { picks: candidates, usedScore: baseScore, filtered: false };
+  let thr = baseScore, result = candidates, steps = 0;
+  while (result.length > maxPicks && thr < 95 && steps < 15) {
+    thr += 5; steps++;
+    const f = candidates.filter(p => p.score >= thr);
+    if (f.length >= 3) result = f; else break;
+  }
+  return { picks: result.sort((a,b)=>b.score-a.score).slice(0,maxPicks),
+           usedScore: thr, filtered: steps > 0 };
+}
+
+// ══════════════════════════════════════════
+//  MAIN SCAN
+// ══════════════════════════════════════════
+async function runScan() {
+  scanning = true; stopFlag = false; picks = []; scanDone = 0;
+  const codes   = buildCodes();
+  scanTotal     = codes.length;
+  const batches = [];
+  for (let i = 0; i < codes.length; i += CFG.batchSize)
+    batches.push(codes.slice(i, i + CFG.batchSize));
+
+  const all = []; const t0 = Date.now();
+  setScanUI(true);
+  log(`スキャン開始 モード:${mode.toUpperCase()} 対象:${codes.length.toLocaleString()} バッチ:${CFG.batchSize}銘柄`, 'i');
+  log(`閾値:${CFG.baseScore}点 上限:${CFG.maxPicks}件 出来高:${fmtVol(CFG.minVol)}以上`, 'i');
+  showProxyStatus('接続テスト中...', '');
+
+  // 接続テスト（最初のバッチで戦略を確定）
+  log('接続テスト開始（5つの方法を順番に試します）', 'i');
+
+  for (let bi = 0; bi < batches.length; bi++) {
+    if (stopFlag) { log('スキャン中断', 'w'); break; }
+    const batch = batches[bi];
+    const from  = batch[0].replace('.T','');
+    const to    = batch[batch.length-1].replace('.T','');
+    setProgress(scanDone, scanTotal, `${from}〜${to}`);
+
+    const quotes = await fetchBatch(batch);
+    for (const q of quotes) {
+      const r = mode === 'pts' ? scorePTS(q) : scoreNext(q);
+      if (r && r.score >= CFG.baseScore) all.push(r);
+    }
+    scanDone += batch.length;
+
+    if (bi % 10 === 0) {
+      const s = ((Date.now()-t0)/1000).toFixed(0);
+      log(`${bi+1}/${batches.length}バッチ 取得:${quotes.length}件 候補:${all.length}件 ${s}秒`, 'i');
+    }
+    await sleep(500);
+  }
+
+  const { picks: fp, usedScore, filtered } = autoFilter(
+    all.sort((a,b) => b.score-a.score), CFG.maxPicks, CFG.baseScore);
+  picks = fp;
+  const elapsed = ((Date.now()-t0)/1000).toFixed(0);
+
+  if (filtered) {
+    showFilterBanner(all.length, fp.length, usedScore);
+    log(`⚡ 自動絞り込み: ${all.length}件→${fp.length}件（閾値${usedScore}点）`, 'w');
+  } else {
+    document.getElementById('filter-banner').style.display = 'none';
+  }
+  log(`✅ 完了 ${elapsed}秒 選出:${fp.length}件`, 'ok');
+  renderPicks(fp);
+  setScanUI(false);
+  setProgress(scanTotal, scanTotal, '');
+  document.getElementById('sv-picks').textContent = fp.length;
+  scanning = false;
+}
+
+// ══════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════
+function renderPicks(list) {
+  const el = document.getElementById('picks-list');
+  el.innerHTML = '';
+  document.getElementById('picks-cnt').textContent = list.length + '件';
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="ico">😔</div>
+      <h3>該当銘柄なし</h3>
+      <p>候補が見つかりませんでした<br>
+      設定でスコア閾値を下げるか<br>出来高の条件を緩めてみてください</p></div>`;
+    return;
+  }
+  list.forEach((p, i) => {
+    const rank = i+1;
+    const mc   = rank===1?'m1':rank===2?'m2':rank===3?'m3':'mn';
+    const col  = p.score>=80?'var(--green)':p.score>=65?'var(--gold)':'var(--blue)';
+    const tagsH = p.tags.map(t=>`<span class="ptag ${t.c}">${t.l}</span>`).join('');
+    const rsnsH = p.reasons.map(r=>`<div class="ri"><span class="ri-icon">${r.i}</span>
+      <span class="ri-text">${r.t}</span></div>`).join('');
+    const csign = p.chg >= 0 ? '+' : '';
+    const ccls  = p.chg >= 0 ? 'u' : 'd';
+    el.insertAdjacentHTML('beforeend', `
+    <div class="pick ${rank<=3?'top3':''} ${rank===1?'top1':''}">
+      <div class="medal ${mc}">${rank}</div>
+      <div class="pbody">
+        <div class="ptop">
+          <div class="pleft">
+            <div class="pcode">${p.code}</div>
+            <div class="pname">${p.name}</div>
+            <div class="ptags">${tagsH}</div>
+          </div>
+          <div class="pscore">
+            <div class="sc-n" style="color:${col}">${p.score}</div>
+            <div class="sc-d">/100</div>
+            <div class="sc-bw"><div class="sc-b" style="width:${p.score}%;background:${col}"></div></div>
+          </div>
+        </div>
+        <div class="pgrid">
+          <div class="pc"><div class="pl">終値</div>
+            <div class="pv cu">¥${p.price.toLocaleString()}</div>
+            <div class="ps ${ccls}">${csign}${p.chg}%</div></div>
+          <div class="pc"><div class="pl">${mode==='pts'?'PTS目標':'利確目標'}</div>
+            <div class="pv tp2">¥${p.tp.toLocaleString()}</div>
+            <div class="ps n">目安</div></div>
+          <div class="pc"><div class="pl">損切ライン</div>
+            <div class="pv sl">¥${p.sl.toLocaleString()}</div>
+            <div class="ps n">目安</div></div>
+        </div>
+        <div class="rbox">
+          <div class="rtitle">選定理由</div>
+          <div class="rlist">${rsnsH}</div>
+        </div>
+        <div class="mbar">
+          ${p.metrics.vr  ? `<div class="mb pos"><b>出来高×${p.metrics.vr}</b></div>`:''}
+          ${p.metrics.chg ? `<div class="mb pos"><b>+${p.metrics.chg}%</b></div>`:''}
+          ${p.metrics.wk  ? `<div class="mb hlt"><b>52週${p.metrics.wk}%</b></div>`:''}
+          ${p.metrics.cp  ? `<div class="mb"><b>引け${p.metrics.cp}%</b></div>`:''}
+          <div class="mb"><b>${fmtVol(p.vol)}</b>株</div>
+        </div>
+        <div class="ctime">${p.ts} スキャン</div>
+      </div>
+    </div>`);
+  });
+}
+
+// ══════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════
+function showFilterBanner(before, after, score) {
+  const b = document.getElementById('filter-banner');
+  b.style.display = 'block';
+  b.innerHTML = `⚡ <b>自動絞り込み</b>：${before.toLocaleString()}件 → <b>${after}件</b>に厳選（閾値 <b>${CFG.baseScore}点→${score}点</b>）`;
+}
+function setProgress(done, total, cur) {
+  document.getElementById('sv-scanned').textContent = done.toLocaleString()+'/'+total.toLocaleString();
+  document.getElementById('pbar').style.width = total>0?(done/total*100)+'%':'0%';
+  const el = document.getElementById('hs-cur');
+  if (cur) { el.style.display=''; document.getElementById('sv-cur').textContent=cur; }
+  else      { el.style.display='none'; }
+}
+function setScanUI(on) {
+  const b = document.getElementById('scan-btn');
+  b.textContent = on ? 'STOP' : 'SCAN';
+  b.classList.toggle('run', on);
+}
+function setMode(m) {
+  mode = CFG.mode = m;
+  document.getElementById('mp-next').classList.toggle('on', m==='next');
+  document.getElementById('mp-pts').classList.toggle('on',  m==='pts');
+  document.getElementById('logo-sub').textContent =
+    m==='pts' ? 'PTS夜間取引候補 / 東証全銘柄' : '翌日買い候補 / 東証全銘柄';
+  document.getElementById('picks-mode-label').textContent =
+    m==='pts' ? 'PTS夜間取引候補' : '翌日買い候補';
+}
+function toggleScan() {
+  if (scanning) { stopFlag=true; scanning=false; setScanUI(false); }
+  else runScan();
+}
+let ftimer;
+function flash(msg) {
+  clearTimeout(ftimer);
+  document.getElementById('fmsg').innerHTML = msg;
+  document.getElementById('flash').style.display='block';
+  ftimer = setTimeout(closeFlash, 7000);
+}
+function closeFlash() { document.getElementById('flash').style.display='none'; }
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('page-'+id).classList.add('on');
+  el.classList.add('on');
+}
+function log(msg, cls='') {
+  const b = document.getElementById('logbox');
+  const ts = new Date().toTimeString().slice(0,8);
+  const d  = document.createElement('div');
+  d.className='le '+cls; d.textContent=`[${ts}] ${msg}`;
+  b.insertBefore(d, b.firstChild);
+  if (b.children.length > 300) b.removeChild(b.lastChild);
+}
+const volLbl=['0株','5万株','20万株','50万株','100万株','300万株'];
+const volVal=[0,50000,200000,500000,1000000,3000000];
+function upBase(v){ CFG.baseScore=+v; document.getElementById('sv-base').textContent=v+'点'; }
+function upMax(v) { CFG.maxPicks=+v;  document.getElementById('sv-max').textContent=v+'件'; }
+function upVol(v) { CFG.minVol=volVal[+v]; document.getElementById('sv-vol').textContent=volLbl[+v]; }
+function upBatch(v){ CFG.batchSize=+v; document.getElementById('sv-batch').textContent=v+'銘柄'; }
+function fmtVol(v) {
+  if (!v) return '-';
+  if (v>=1e8) return (v/1e8).toFixed(1)+'億';
+  if (v>=1e4) return Math.round(v/1e4)+'万';
+  return v.toString();
+}
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+function updateClock() {
+  const now=new Date(), t=now.getHours()*60+now.getMinutes(), wd=now.getDay();
+  const wk=wd===0||wd===6, am=!wk&&t>=9*60&&t<11*60+30, pm=!wk&&t>=12*60+30&&t<15*60+30;
+  const pts=!wk&&t>=16*60, open=am||pm;
+  document.getElementById('s-clock').textContent=now.toTimeString().slice(0,8);
+  document.getElementById('s-am').textContent=am?'開場中':'クローズ';
+  document.getElementById('s-am').className='css '+(am?'open':'closed');
+  document.getElementById('s-pm').textContent=pm?'開場中':'クローズ';
+  document.getElementById('s-pm').className='css '+(pm?'open':'closed');
+  document.getElementById('sv-mkt').textContent=wk?'週末':open?'取引時間中':pts?'PTS時間帯':'時間外';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  updateClock(); setInterval(updateClock, 1000);
+  log('TSE 翌日・PTS 銘柄選定 起動', 'ok');
+  log('スキャン対象: 1301〜9984 (8,684コード)', 'i');
+  log('接続: Cloudflare Worker（black-sun-a8c8）経由でYahoo Finance取得', 'ok');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+});
+</script>
+</body>
+</html>
